@@ -62,8 +62,13 @@ const server = http.createServer((req, res) => {
     const allowedOrigins = ['http://localhost:5173', 'http://localhost:5174'];
     if (allowedOrigins.includes(origin)) {
         res.setHeader('Access-Control-Allow-Origin', origin);
+    } else if (origin) {
+        // Reject request from unauthorized origins
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'CORS Origin Blocked' }));
+        return;
     } else {
-        res.setHeader('Access-Control-Allow-Origin', origin || '*');
+        res.setHeader('Access-Control-Allow-Origin', allowedOrigins[0]);
     }
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -87,15 +92,19 @@ const server = http.createServer((req, res) => {
     // Helper to read POST body safely with limits to prevent buffer exhaustion DoS
     const parseJsonBody = (req, res, callback) => {
         let body = '';
+        let destroyed = false;
         req.on('data', chunk => {
+            if (destroyed) return;
             body += chunk.toString();
             if (body.length > 256000) { // Limit chunks to 256KB
+                destroyed = true;
                 res.writeHead(413, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ error: 'Request body exceeds size quota.' }));
                 req.destroy();
             }
         });
         req.on('end', () => {
+            if (destroyed) return;
             try {
                 const parsed = JSON.parse(body || '{}');
                 callback(null, parsed);
@@ -112,6 +121,21 @@ const server = http.createServer((req, res) => {
             if (err || !name || !rollNo || !email || !phone) {
                 res.writeHead(400, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ error: 'All fields (name, rollNo, email, phone) are required.' }));
+                return;
+            }
+
+            // Strict regex patterns
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            const phoneRegex = /^\+?[0-9\s-]{10,15}$/;
+
+            if (!emailRegex.test(email)) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Invalid email address format.' }));
+                return;
+            }
+            if (!phoneRegex.test(phone)) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Invalid phone number format.' }));
                 return;
             }
 
@@ -132,10 +156,10 @@ const server = http.createServer((req, res) => {
 
                 const newStudent = {
                     id: 'ST' + Math.floor(1000 + Math.random() * 9000),
-                    name: name.trim(),
+                    name: name.trim().replace(/[<>]/g, ''),
                     rollNo: normalizedRoll,
-                    email: email.trim(),
-                    phone: phone.trim(),
+                    email: email.trim().replace(/[<>]/g, ''),
+                    phone: phone.trim().replace(/[<>]/g, ''),
                     freeWashesLeft: 15
                 };
 
@@ -280,8 +304,8 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // Route: POST /api/operator/action (Mutations signed by admin sessions)
-    if (parsedUrl.pathname === '/api/operator/action' && req.method === 'POST') {
+    // Route: POST /api/operator/create-task (Server-driven task registration & quota decrement)
+    if (parsedUrl.pathname === '/api/operator/create-task' && req.method === 'POST') {
         if (!activeSession || activeSession.role !== 'serviceman') {
             res.writeHead(403, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Forbidden. Admin credentials required.' }));
@@ -289,33 +313,237 @@ const server = http.createServer((req, res) => {
         }
 
         parseJsonBody(req, res, (err, payload) => {
-            if (err || !payload.students || !payload.jobs) {
+            const { rollNo, services, ironCount, notes } = payload;
+            if (err || !rollNo || !services) {
                 res.writeHead(400, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: 'Invalid payload schemas.' }));
+                res.end(JSON.stringify({ error: 'Roll number and services object are required.' }));
                 return;
             }
 
-            readDb((dbErr, existingData) => {
+            const cleanNotes = notes ? String(notes).trim().replace(/[<>]/g, '').substring(0, 500) : '';
+            const countForIroning = Math.max(0, parseInt(ironCount) || 0);
+
+            readDb((dbErr, data) => {
                 if (dbErr) {
                     res.writeHead(500, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ error: 'Database Access Failure.' }));
+                    res.end(JSON.stringify({ error: 'Database access failure.' }));
                     return;
                 }
 
-                // Retain original feedbacks array
-                const updatedData = {
-                    students: payload.students,
-                    jobs: payload.jobs,
-                    feedbacks: existingData.feedbacks || []
+                const nRoll = rollNo.trim().toUpperCase();
+                const studentIndex = data.students.findIndex(s => s.rollNo.trim().toUpperCase() === nRoll);
+                if (studentIndex === -1) {
+                    res.writeHead(404, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Student roll number not onboarded.' }));
+                    return;
+                }
+
+                const student = data.students[studentIndex];
+
+                // Calculate costs securely on backend
+                let washCost = 0;
+                let dryCost = 0;
+                let ironCost = 0;
+
+                if (services.wash) {
+                    if (student.freeWashesLeft > 0) {
+                        data.students[studentIndex].freeWashesLeft -= 1;
+                        washCost = 0;
+                    } else {
+                        washCost = 75;
+                    }
+                }
+                if (services.dry) {
+                    dryCost = 75;
+                }
+                if (services.iron) {
+                    ironCost = countForIroning * 8;
+                }
+
+                const jobId = 'LND' + Math.floor(1000 + Math.random() * 9000);
+
+                // Find next token number sequential
+                let maxTokenNum = 100;
+                (data.jobs || []).forEach(j => {
+                    if (j.tokenNumber && j.tokenNumber.startsWith('TK-')) {
+                        const num = parseInt(j.tokenNumber.split('-')[1]);
+                        if (!isNaN(num) && num > maxTokenNum) {
+                            maxTokenNum = num;
+                        }
+                    }
+                });
+                const tokenNumber = `TK-${maxTokenNum + 1}`;
+
+                const newJob = {
+                    id: jobId,
+                    studentId: student.id,
+                    studentName: student.name,
+                    date: new Date().toISOString(),
+                    services: {
+                        wash: !!services.wash,
+                        dry: !!services.dry,
+                        iron: !!services.iron
+                    },
+                    ironCount: countForIroning,
+                    status: 'Pending',
+                    bill: {
+                        washCost,
+                        dryCost,
+                        ironCost,
+                        total: washCost + dryCost + ironCost
+                    },
+                    notes: cleanNotes || 'Walk-in registration',
+                    tokenNumber,
+                    wasProcessed: true
                 };
 
-                writeDb(updatedData, (writeErr) => {
+                if (!data.jobs) data.jobs = [];
+                data.jobs.unshift(newJob);
+
+                writeDb(data, (writeErr) => {
                     if (writeErr) {
                         res.writeHead(500, { 'Content-Type': 'application/json' });
                         res.end(JSON.stringify({ error: 'Database write failure.' }));
                     } else {
                         res.writeHead(200, { 'Content-Type': 'application/json' });
-                        res.end(JSON.stringify({ success: true }));
+                        res.end(JSON.stringify({ success: true, job: newJob, students: data.students }));
+                    }
+                });
+            });
+        });
+        return;
+    }
+
+    // Route: POST /api/operator/update-status (Server-controlled phase transitions)
+    if (parsedUrl.pathname === '/api/operator/update-status' && req.method === 'POST') {
+        if (!activeSession || activeSession.role !== 'serviceman') {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Forbidden. Admin credentials required.' }));
+            return;
+        }
+
+        parseJsonBody(req, res, (err, payload) => {
+            const { jobId, newStatus } = payload;
+            if (err || !jobId || !newStatus) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Job ID and new status are required.' }));
+                return;
+            }
+
+            readDb((dbErr, data) => {
+                if (dbErr) {
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Database access failure.' }));
+                    return;
+                }
+
+                const jobIndex = (data.jobs || []).findIndex(j => j.id === jobId);
+                if (jobIndex === -1) {
+                    res.writeHead(404, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Task not found.' }));
+                    return;
+                }
+
+                const job = data.jobs[jobIndex];
+                let wasProcessed = job.wasProcessed;
+                let readyDate = job.readyDate;
+                let collectedDate = job.collectedDate;
+
+                // Validate state transitions
+                if (newStatus !== 'Pending' && newStatus !== 'Collected' && !wasProcessed) {
+                    if (job.services.wash) {
+                        const studentIndex = data.students.findIndex(s => s.id === job.studentId);
+                        if (studentIndex !== -1) {
+                            const currentFree = data.students[studentIndex].freeWashesLeft;
+                            if (currentFree > 0) {
+                                data.students[studentIndex].freeWashesLeft -= 1;
+                            }
+                        }
+                    }
+                    wasProcessed = true;
+                }
+
+                if (newStatus === 'Ready') {
+                    readyDate = new Date().toISOString();
+                }
+
+                if (newStatus === 'Collected') {
+                    collectedDate = new Date().toISOString();
+                    if (!wasProcessed) {
+                        if (job.services.wash) {
+                            const studentIndex = data.students.findIndex(s => s.id === job.studentId);
+                            if (studentIndex !== -1) {
+                                const currentFree = data.students[studentIndex].freeWashesLeft;
+                                if (currentFree > 0) {
+                                    data.students[studentIndex].freeWashesLeft -= 1;
+                                }
+                            }
+                        }
+                        wasProcessed = true;
+                    }
+                }
+
+                data.jobs[jobIndex] = {
+                    ...job,
+                    status: newStatus,
+                    wasProcessed,
+                    readyDate,
+                    collectedDate
+                };
+
+                writeDb(data, (writeErr) => {
+                    if (writeErr) {
+                        res.writeHead(500, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ error: 'Database write failure.' }));
+                    } else {
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ success: true, job: data.jobs[jobIndex], students: data.students }));
+                    }
+                });
+            });
+        });
+        return;
+    }
+
+    // Route: POST /api/operator/reset-quota (Reset student wash quota)
+    if (parsedUrl.pathname === '/api/operator/reset-quota' && req.method === 'POST') {
+        if (!activeSession || activeSession.role !== 'serviceman') {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Forbidden. Admin credentials required.' }));
+            return;
+        }
+
+        parseJsonBody(req, res, (err, payload) => {
+            const { studentId } = payload;
+            if (err || !studentId) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Student ID is required.' }));
+                return;
+            }
+
+            readDb((dbErr, data) => {
+                if (dbErr) {
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Database access failure.' }));
+                    return;
+                }
+
+                const sIndex = data.students.findIndex(s => s.id === studentId);
+                if (sIndex === -1) {
+                    res.writeHead(404, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Student not found.' }));
+                    return;
+                }
+
+                data.students[sIndex].freeWashesLeft = 15;
+
+                writeDb(data, (writeErr) => {
+                    if (writeErr) {
+                        res.writeHead(500, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ error: 'Database write failure.' }));
+                    } else {
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ success: true, students: data.students }));
                     }
                 });
             });

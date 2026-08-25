@@ -83,7 +83,7 @@ export default function ServicemanDashboard({
         };
     })();
 
-    const handleWalkinSubmit = (e) => {
+    const handleWalkinSubmit = async (e) => {
         e.preventDefault();
 
         const studentObj = students.find(s => s.rollNo.trim().toUpperCase() === walkinRollNoQuery.trim().toUpperCase());
@@ -97,50 +97,22 @@ export default function ServicemanDashboard({
             return;
         }
 
-        // Calculate details
-        let washCost = 0;
-        let dryCost = 0;
-        let ironCost = 0;
-
-        if (walkinServices.wash) {
-            washCost = studentObj.freeWashesLeft > 0 ? 0 : 75;
-        }
-        if (walkinServices.dry) {
-            dryCost = 75;
-        }
-        if (walkinServices.iron) {
-            ironCost = walkinIronCount * 8;
-        }
-
-        const jobId = 'LND' + Math.floor(1000 + Math.random() * 9000);
-        const newJob = {
-            id: jobId,
-            studentId: studentObj.id,
-            studentName: studentObj.name,
-            date: new Date().toISOString(),
-            services: { ...walkinServices },
+        // Trigger state callbacks and await validation/persistence
+        const success = await onUpdateJobStatus({
+            rollNo: walkinRollNoQuery.trim(),
+            services: walkinServices,
             ironCount: walkinServices.iron ? parseInt(walkinIronCount) : 0,
-            status: 'Pending',
-            bill: {
-                washCost,
-                dryCost,
-                ironCost,
-                total: washCost + dryCost + ironCost
-            },
-            notes: walkinNotes ? walkinNotes + " (Walk-in)" : "Walk-in registration",
-            wasProcessed: false,
-            estimatedReady: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-        };
+            notes: walkinNotes ? walkinNotes + " (Walk-in)" : "Walk-in registration"
+        }, 'CREATE');
 
-        // Trigger state callbacks
-        onUpdateJobStatus(newJob, 'CREATE');
-
-        // Reset inputs
-        setWalkinRollNoQuery('');
-        setWalkinServices({ wash: true, dry: false, iron: false });
-        setWalkinIronCount(0);
-        setWalkinNotes('');
-        alert(`Walk-in order #${jobId} added!`);
+        if (success) {
+            // Reset inputs only on successful creation
+            setWalkinRollNoQuery('');
+            setWalkinServices({ wash: true, dry: false, iron: false });
+            setWalkinIronCount(0);
+            setWalkinNotes('');
+            alert("Walk-in order created successfully!");
+        }
     };
 
     // Filter students based on search string

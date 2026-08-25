@@ -871,3 +871,19 @@ body.dark-theme .tab-btn.active {
   color: #FFFFFF;
   border-bottom-color: #FFFFFF;
 }
+
+/* Footer Styling */
+.footer-bar {
+  border-top: 1px solid var(--border-color);
+  padding: 1.25rem;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.6);
+  transition: background var(--transition-normal), border-color var(--transition-normal);
+}
+
+body.dark-theme .footer-bar {
+  background: rgba(0, 15, 63, 0.5);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}

@@ -5,7 +5,7 @@
       "name": "Aarav Sharma",
       "rollNo": "2024CSB001",
       "phone": "+91 98765 43210",
-      "freeWashesLeft": 11
+      "freeWashesLeft": 14
     },
     {
       "id": "ST002",
@@ -34,223 +34,33 @@
       "rollNo": "2023CEB056",
       "phone": "+91 98321 09876",
       "freeWashesLeft": 15
-    },
-    {
-      "id": "ST7325",
-      "name": "Karthik Annadurai",
-      "rollNo": "IC2025016",
-      "email": "karthik.annadurai@iiitb.ac.in",
-      "phone": "9845608928",
-      "freeWashesLeft": 12
     }
   ],
   "jobs": [
     {
-      "id": "LND1581",
+      "id": "LND2521",
       "studentId": "ST001",
       "studentName": "Aarav Sharma",
-      "date": "2026-08-25T08:16:26.798Z",
+      "date": "2026-08-25T18:17:16.627Z",
       "services": {
         "wash": true,
         "dry": true,
         "iron": true
       },
-      "ironCount": 6,
-      "status": "Pending",
-      "bill": {
-        "washCost": 0,
-        "dryCost": 75,
-        "ironCost": 48,
-        "total": 123
-      },
-      "notes": "Walk-in registration",
-      "wasProcessed": true,
-      "estimatedReady": "2026-08-26T08:16:26.798Z",
-      "tokenNumber": "TK-108"
-    },
-    {
-      "id": "LND7712",
-      "studentId": "ST7325",
-      "studentName": "Karthik Annadurai",
-      "date": "2026-08-25T08:15:12.998Z",
-      "services": {
-        "wash": false,
-        "dry": false,
-        "iron": true
-      },
-      "ironCount": 1,
-      "status": "Collected",
-      "bill": {
-        "washCost": 0,
-        "dryCost": 0,
-        "ironCost": 8,
-        "total": 8
-      },
-      "notes": "Walk-in registration",
-      "wasProcessed": true,
-      "estimatedReady": "2026-08-26T08:15:12.998Z",
-      "tokenNumber": "TK-107",
-      "readyDate": "2026-08-25T08:15:33.025Z",
-      "collectedDate": "2026-08-25T08:15:39.210Z"
-    },
-    {
-      "id": "LND6765",
-      "studentId": "ST001",
-      "studentName": "Aarav Sharma",
-      "date": "2026-08-25T07:54:39.832Z",
-      "services": {
-        "wash": true,
-        "dry": true,
-        "iron": false
-      },
-      "ironCount": 0,
-      "status": "Pending",
-      "bill": {
-        "washCost": 0,
-        "dryCost": 75,
-        "ironCost": 0,
-        "total": 75
-      },
-      "notes": "Walk-in registration",
-      "wasProcessed": true,
-      "estimatedReady": "2026-08-26T07:54:39.832Z",
-      "tokenNumber": "TK-106"
-    },
-    {
-      "id": "LND4586",
-      "studentId": "ST7325",
-      "studentName": "Karthik Annadurai",
-      "date": "2026-08-25T06:45:47.268Z",
-      "services": {
-        "wash": true,
-        "dry": false,
-        "iron": false
-      },
-      "ironCount": 0,
-      "status": "Collected",
-      "bill": {
-        "washCost": 0,
-        "dryCost": 0,
-        "ironCost": 0,
-        "total": 0
-      },
-      "notes": "Walk-in registration",
-      "wasProcessed": true,
-      "estimatedReady": "2026-08-26T06:45:47.268Z",
-      "tokenNumber": "TK-105",
-      "readyDate": "2026-08-25T06:59:40.203Z",
-      "collectedDate": "2026-08-25T06:59:40.418Z"
-    },
-    {
-      "id": "LND6079",
-      "studentId": "ST001",
-      "studentName": "Aarav Sharma",
-      "date": "2026-08-25T06:43:26.539Z",
-      "services": {
-        "wash": true,
-        "dry": true,
-        "iron": true
-      },
-      "ironCount": 3,
+      "ironCount": 5,
       "status": "Collected",
       "bill": {
         "washCost": 0,
         "dryCost": 75,
-        "ironCost": 24,
-        "total": 99
+        "ironCost": 40,
+        "total": 115
       },
       "notes": "Walk-in registration",
-      "wasProcessed": true,
-      "estimatedReady": "2026-08-26T06:43:26.539Z",
-      "tokenNumber": "TK-104",
-      "readyDate": "2026-08-25T06:59:39.039Z",
-      "collectedDate": "2026-08-25T06:59:39.266Z"
-    },
-    {
-      "id": "LND7572",
-      "studentId": "ST7325",
-      "studentName": "Karthik Annadurai",
-      "date": "2026-08-25T06:42:39.031Z",
-      "services": {
-        "wash": true,
-        "dry": true,
-        "iron": false
-      },
-      "ironCount": 0,
-      "status": "Collected",
-      "bill": {
-        "washCost": 0,
-        "dryCost": 75,
-        "ironCost": 0,
-        "total": 75
-      },
-      "notes": "Walk-in registration",
-      "wasProcessed": true,
-      "estimatedReady": "2026-08-26T06:42:39.031Z",
-      "tokenNumber": "TK-103",
-      "readyDate": "2026-08-25T06:52:14.171Z",
-      "collectedDate": "2026-08-25T06:59:38.038Z"
-    },
-    {
-      "id": "LND1344",
-      "studentId": "ST7325",
-      "studentName": "Karthik Annadurai",
-      "date": "2026-08-24T18:42:35.037Z",
-      "services": {
-        "wash": true,
-        "dry": true,
-        "iron": false
-      },
-      "ironCount": 0,
-      "status": "Collected",
-      "bill": {
-        "washCost": 0,
-        "dryCost": 75,
-        "ironCost": 0,
-        "total": 75
-      },
-      "notes": "Walk-in registration",
-      "wasProcessed": true,
-      "estimatedReady": "2026-08-25T18:42:35.037Z",
-      "tokenNumber": "TK-102",
-      "readyDate": "2026-08-24T18:43:04.544Z",
-      "collectedDate": "2026-08-24T18:43:18.036Z"
-    },
-    {
-      "id": "LND3235",
-      "studentId": "ST001",
-      "studentName": "Aarav Sharma",
-      "date": "2026-08-22T20:20:40.735Z",
-      "services": {
-        "wash": true,
-        "dry": true,
-        "iron": false
-      },
-      "ironCount": 0,
-      "status": "Collected",
-      "bill": {
-        "washCost": 0,
-        "dryCost": 75,
-        "ironCost": 0,
-        "total": 75
-      },
-      "notes": "Walk-in registration",
-      "wasProcessed": true,
-      "estimatedReady": "2026-08-23T20:20:40.735Z",
       "tokenNumber": "TK-101",
-      "readyDate": "2026-08-22T20:20:51.198Z",
-      "collectedDate": "2026-08-22T20:20:54.066Z"
+      "wasProcessed": true,
+      "readyDate": "2026-08-25T18:17:42.772Z",
+      "collectedDate": "2026-08-25T18:17:55.859Z"
     }
   ],
-  "feedbacks": [
-    {
-      "id": "FB1178",
-      "studentName": "Aarav Sharma",
-      "studentId": "ST001",
-      "rating": 4,
-      "category": "Wash Quality",
-      "comment": "Hi",
-      "date": "2026-08-25T06:44:27.830Z"
-    }
-  ]
+  "feedbacks": []
 }

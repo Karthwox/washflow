@@ -50,6 +50,16 @@ export default function App() {
     }
   }, [session]);
 
+  // Set document title dynamically based on locked portal role
+  useEffect(() => {
+    const role = getLockedRole();
+    if (role === 'serviceman') {
+      document.title = 'CampusWash for Operator';
+    } else {
+      document.title = 'CampusWash for Students';
+    }
+  }, []);
+
   // Load and poll data from the Node API server
   useEffect(() => {
     if (!session || !session.token) {
@@ -64,6 +74,11 @@ export default function App() {
 
         if (session.role === 'student') {
           const res = await fetch(`${BACKEND_URL}/api/student/dashboard`, { headers });
+          if (res.status === 401 || res.status === 403) {
+            setSession(null);
+            localStorage.removeItem('laundry_session');
+            return;
+          }
           if (res.ok) {
             const data = await res.json();
             setStudents((prev) => {
@@ -96,6 +111,11 @@ export default function App() {
           }
         } else if (session.role === 'serviceman') {
           const res = await fetch(`${BACKEND_URL}/api/operator/dashboard`, { headers });
+          if (res.status === 401 || res.status === 403) {
+            setSession(null);
+            localStorage.removeItem('laundry_session');
+            return;
+          }
           if (res.ok) {
             const data = await res.json();
             setStudents((prev) => {
@@ -134,22 +154,6 @@ export default function App() {
     return () => clearInterval(interval);
   }, [session]);
 
-  const saveToBackend = async (nextStudents, nextJobs) => {
-    if (!session || !session.token) return;
-    try {
-      await fetch(`${BACKEND_URL}/api/operator/action`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.token}`
-        },
-        body: JSON.stringify({ students: nextStudents, jobs: nextJobs })
-      });
-    } catch (e) {
-      console.error('Failed to sync changes to backend API:', e);
-    }
-  };
-
   const handleSubmitFeedback = async (feedbackData) => {
     if (!session || !session.token) return;
     try {
@@ -184,127 +188,93 @@ export default function App() {
   }, [theme]);
 
 
-  // Handler for inserting new client requests
-  const handleNewJob = (newJob) => {
-    const nextJobs = [newJob, ...jobs];
-    setJobs(nextJobs);
-    saveToBackend(students, nextJobs);
-  };
+  // Handler for advancing job status & walkin task creation
+  const handleUpdateJobStatus = async (jobIdOrItem, newStatus) => {
+    if (!session || !session.token) return false;
+    const headers = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session.token}`
+    };
 
-  // Handler for advancing job status
-  const handleUpdateJobStatus = (jobIdOrItem, newStatus) => {
-    let nextJobs = [...jobs];
-    let nextStudents = [...students];
-
-    // If we are inserting a new job from the serviceman walkin panel:
     if (newStatus === 'CREATE' && typeof jobIdOrItem === 'object') {
-      const walkinJob = { ...jobIdOrItem };
+      const walkinJob = jobIdOrItem;
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/operator/create-task`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            rollNo: walkinJob.rollNo,
+            services: walkinJob.services,
+            ironCount: walkinJob.ironCount,
+            notes: walkinJob.notes
+          })
+        });
 
-      // Generate sequential Token Number matching 'TK-XXX' format
-      let maxTokenNum = 100;
-      jobs.forEach(j => {
-        if (j.tokenNumber && j.tokenNumber.startsWith('TK-')) {
-          const num = parseInt(j.tokenNumber.split('-')[1]);
-          if (!isNaN(num) && num > maxTokenNum) {
-            maxTokenNum = num;
-          }
+        if (res.ok) {
+          const data = await res.json();
+          setJobs((prev) => [data.job, ...prev]);
+          setStudents(data.students);
+          return true;
+        } else {
+          const err = await res.json();
+          alert(`Error: ${err.error || 'Failed to create student task.'}`);
+          return false;
         }
-      });
-      walkinJob.tokenNumber = `TK-${maxTokenNum + 1}`;
-
-      // Since all operator tasks are paid upfront, set wasProcessed = true
-      walkinJob.wasProcessed = true;
-
-      // Deduct washes if walkin requests washing and student has quota
-      if (walkinJob.services.wash) {
-        const studentIndex = nextStudents.findIndex(s => s.id === walkinJob.studentId);
-        if (studentIndex !== -1) {
-          const currentFree = nextStudents[studentIndex].freeWashesLeft;
-          if (currentFree > 0) {
-            nextStudents[studentIndex] = {
-              ...nextStudents[studentIndex],
-              freeWashesLeft: currentFree - 1
-            };
-          }
-        }
+      } catch (err) {
+        console.error(err);
+        alert('Server unreachable. Walk-in task not recorded.');
+        return false;
       }
-
-      nextJobs = [walkinJob, ...jobs];
-      setJobs(nextJobs);
-      setStudents(nextStudents);
-      saveToBackend(nextStudents, nextJobs);
-      return;
     }
 
     const jobId = jobIdOrItem;
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/operator/update-status`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ jobId, newStatus })
+      });
 
-    nextJobs = jobs.map((job) => {
-      if (job.id !== jobId) return job;
-
-      let wasProcessed = job.wasProcessed;
-      let readyDate = job.readyDate;
-      let collectedDate = job.collectedDate;
-
-      // If status is shifting from Pending to a processing phase:
-      // deduct remaining washes if wash is featured in the list and hasn't been charged
-      if (newStatus !== 'Pending' && newStatus !== 'Collected' && !wasProcessed) {
-        if (job.services.wash) {
-          const studentIndex = nextStudents.findIndex(s => s.id === job.studentId);
-          if (studentIndex !== -1) {
-            const currentFree = nextStudents[studentIndex].freeWashesLeft;
-            if (currentFree > 0) {
-              nextStudents[studentIndex] = {
-                ...nextStudents[studentIndex],
-                freeWashesLeft: currentFree - 1
-              };
-            }
-          }
-        }
-        wasProcessed = true;
+      if (res.ok) {
+        const data = await res.json();
+        setJobs((prev) => prev.map((j) => (j.id === jobId ? data.job : j)));
+        setStudents(data.students);
+        return true;
+      } else {
+        const err = await res.json();
+        alert(`Error updates: ${err.error || 'Failed to modify status.'}`);
+        return false;
       }
-
-      if (newStatus === 'Ready') {
-        readyDate = new Date().toISOString();
-      }
-
-      if (newStatus === 'Collected') {
-        collectedDate = new Date().toISOString();
-        // Safety fallback: if job is collected but somehow never flagged as processed/quotas deducted
-        if (!wasProcessed) {
-          if (job.services.wash) {
-            const studentIndex = nextStudents.findIndex(s => s.id === job.studentId);
-            if (studentIndex !== -1) {
-              const currentFree = nextStudents[studentIndex].freeWashesLeft;
-              if (currentFree > 0) {
-                nextStudents[studentIndex] = {
-                  ...nextStudents[studentIndex],
-                  freeWashesLeft: currentFree - 1
-                };
-              }
-            }
-          }
-          wasProcessed = true;
-        }
-      }
-
-      return {
-        ...job,
-        status: newStatus,
-        wasProcessed,
-        readyDate,
-        collectedDate
-      };
-    });
-
-    setJobs(nextJobs);
-    setStudents(nextStudents);
-    saveToBackend(nextStudents, nextJobs);
+    } catch (err) {
+      console.error(err);
+      alert('Server unreachable. Status update failed.');
+      return false;
+    }
   };
 
-  const handleUpdateStudentWashes = (studentId, count) => {
-    const nextStudents = students.map(s => s.id === studentId ? { ...s, freeWashesLeft: count } : s);
-    setStudents(nextStudents);
-    saveToBackend(nextStudents, jobs);
+  const handleUpdateStudentWashes = async (studentId, count) => {
+    if (!session || !session.token) return;
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/operator/reset-quota`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.token}`
+        },
+        body: JSON.stringify({ studentId })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setStudents(data.students);
+      } else {
+        const err = await res.json();
+        alert(`Error resetting quota: ${err.error || 'Failed to reset.'}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Server unreachable. Reset quota failed.');
+    }
   };
 
   // Screen rendered if user session is not active
@@ -715,7 +685,6 @@ export default function App() {
             feedbacks={feedbacks}
             globalQueueSize={globalQueueSize}
             onSubmitFeedback={handleSubmitFeedback}
-            onNewJob={handleNewJob}
           />
         ) : (
           <div className="glass-panel card text-center" style={{ padding: '3rem 1rem' }}>
@@ -726,14 +695,7 @@ export default function App() {
       </main>
 
       {/* Footer bar */}
-      <footer style={{
-        borderTop: '1px solid var(--border-color)',
-        padding: '1.25rem',
-        textAlign: 'center',
-        fontSize: '0.8rem',
-        color: 'var(--text-muted)',
-        background: 'rgba(255,255,255,0.6)'
-      }}>
+      <footer className="footer-bar">
         WashFlow college laundry tracking module. Designed for service providers and students.
       </footer>
     </div>
