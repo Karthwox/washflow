@@ -4,6 +4,8 @@ import { DEFAULT_STUDENTS, DEFAULT_JOBS } from './data/mockData';
 import StudentDashboard from './components/StudentDashboard';
 import ServicemanDashboard from './components/ServicemanDashboard';
 
+const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
 export default function App() {
   const [students, setStudents] = useState(DEFAULT_STUDENTS);
   const [jobs, setJobs] = useState([]);
@@ -14,7 +16,6 @@ export default function App() {
     return localStorage.getItem('laundry_theme') || 'light';
   });
 
-  const BACKEND_URL = 'http://localhost:3000';
 
   // Dynamic locked role based on window.location.port
   const getLockedRole = () => {
@@ -280,6 +281,7 @@ export default function App() {
   // Screen rendered if user session is not active
   const LoginScreen = () => {
     const [rollNo, setRollNo] = useState('');
+    const [password, setPassword] = useState('');
     const [accessKey, setAccessKey] = useState('');
     const [loginError, setLoginError] = useState('');
 
@@ -289,6 +291,7 @@ export default function App() {
     const [regRoll, setRegRoll] = useState('');
     const [regEmail, setRegEmail] = useState('');
     const [regPhone, setRegPhone] = useState('');
+    const [regPassword, setRegPassword] = useState('');
 
     const handleStudentLogin = async (e) => {
       e.preventDefault();
@@ -296,7 +299,7 @@ export default function App() {
         const res = await fetch(`${BACKEND_URL}/api/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ role: 'student', rollNo })
+          body: JSON.stringify({ role: 'student', rollNo, password })
         });
         if (res.ok) {
           const data = await res.json();
@@ -316,8 +319,12 @@ export default function App() {
 
     const handleStudentRegister = async (e) => {
       e.preventDefault();
-      if (!regName.trim() || !regRoll.trim() || !regEmail.trim() || !regPhone.trim()) {
+      if (!regName.trim() || !regRoll.trim() || !regEmail.trim() || !regPhone.trim() || !regPassword) {
         setLoginError('⚠️ All fields are required to register.');
+        return;
+      }
+      if (regPassword.length < 8) {
+        setLoginError('⚠️ Password must be at least 8 characters.');
         return;
       }
       try {
@@ -328,7 +335,8 @@ export default function App() {
             name: regName.trim(),
             rollNo: regRoll.trim(),
             email: regEmail.trim(),
-            phone: regPhone.trim()
+            phone: regPhone.trim(),
+            password: regPassword
           })
         });
         if (res.ok) {
@@ -408,7 +416,7 @@ export default function App() {
             ) : (
               <>
                 <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>Student Portal Login</h2>
-                <p className="subtitle mt-1" style={{ fontSize: '0.85rem' }}>Enter your IIIT-B Roll Number to check your quota, bills, and logs.</p>
+                <p className="subtitle mt-1" style={{ fontSize: '0.85rem' }}>Log in with your roll number and password to check your quota, bills, and logs.</p>
               </>
             )}
           </div>
@@ -427,7 +435,7 @@ export default function App() {
                   type="password"
                   id="access-key-input"
                   className="form-control"
-                  placeholder="Enter Operator Access Key (use 'admin')"
+                  placeholder="Enter operator access key"
                   value={accessKey}
                   onChange={(e) => setAccessKey(e.target.value)}
                   required
@@ -484,8 +492,23 @@ export default function App() {
                     required
                   />
                 </div>
+                <div className="form-group mb-3">
+                  <label className="form-label" htmlFor="register-password-input">Password:</label>
+                  <input
+                    type="password"
+                    id="register-password-input"
+                    className="form-control"
+                    placeholder="At least 8 characters"
+                    autoComplete="new-password"
+                    minLength={8}
+                    value={regPassword}
+                    onChange={(e) => setRegPassword(e.target.value)}
+                    required
+                  />
+                </div>
               </>
             ) : (
+              <>
               <div className="form-group mb-3">
                 <label className="form-label" htmlFor="roll-number-input">College Roll Number:</label>
                 <input
@@ -499,6 +522,19 @@ export default function App() {
                   required
                 />
               </div>
+              <div className="form-group mb-3">
+                <label className="form-label" htmlFor="password-input">Password:</label>
+                <input
+                  type="password"
+                  id="password-input"
+                  className="form-control"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+              </div>
+              </>
             )}
 
             {loginError && (
@@ -571,15 +607,18 @@ export default function App() {
           {/* Controls Container */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
             {/* Reset Database Button */}
+            {session?.role === 'serviceman' && (
             <button
               onClick={async () => {
-                if (window.confirm("Are you sure you want to reset all jobs and database records to a clean slate?")) {
+                const confirmKey = window.prompt("This deletes ALL jobs, students and feedback. Re-enter the operator access key to confirm:");
+                if (confirmKey) {
                   try {
-                    const headers = {};
-                    if (session && session.token) {
-                      headers['Authorization'] = `Bearer ${session.token}`;
-                    }
-                    const res = await fetch(`${BACKEND_URL}/api/reset`, { method: 'POST', headers });
+                    const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` };
+                    const res = await fetch(`${BACKEND_URL}/api/reset`, {
+                      method: 'POST',
+                      headers,
+                      body: JSON.stringify({ accessKey: confirmKey })
+                    });
                     if (res.ok) {
                       const data = await res.json();
                       setJobs(data.jobs);
@@ -588,7 +627,8 @@ export default function App() {
                       localStorage.removeItem('laundry_session');
                       alert("Database reset successfully!");
                     } else {
-                      alert("Permission denied or database reset failed.");
+                      const errData = await res.json().catch(() => ({}));
+                      alert(errData.error || "Permission denied or database reset failed.");
                     }
                   } catch (e) {
                     console.error(e);
@@ -612,6 +652,7 @@ export default function App() {
             >
               <RotateCcw size={18} />
             </button>
+            )}
 
             {/* Theme Toggle Button */}
             <button
@@ -646,7 +687,18 @@ export default function App() {
                   )}
                 </span>
                 <button
-                  onClick={() => setSession(null)}
+                  onClick={async () => {
+                    try {
+                      await fetch(`${BACKEND_URL}/api/logout`, {
+                        method: 'POST',
+                        headers: { Authorization: `Bearer ${session.token}` }
+                      });
+                    } catch (e) {
+                      console.error(e);
+                    }
+                    setSession(null);
+                    localStorage.removeItem('laundry_session');
+                  }}
                   className="btn btn-outline"
                   style={{
                     padding: '0.35rem 0.75rem',
