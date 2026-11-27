@@ -2,3 +2,9 @@ node_modules/
 dist/
 .DS_Store
 .env
+
+# Local data and secrets
+database.json
+database.json.*.tmp
+.env.*
+!.env.example
